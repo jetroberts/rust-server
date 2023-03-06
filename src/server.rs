@@ -18,21 +18,21 @@ pub async fn ws_handler(
 
 async fn handle_socket(mut socket: WebSocket, who: SocketAddr) {
     if socket.send(Message::Ping(vec![2, 3, 4])).await.is_ok() {
-        println!("Sent initial ping");
+        println!("Sent initial ping {who}");
     } else {
         println!("Unable to ping client {who}");
         return
     }
 
-    tokio::spawn(async move {
-        let mut index = 0;
-        loop { 
-            
+    // Need a sender and receiever,
+    // Sender needs to send the updated state
+    // reciever needs to take commands to adjust params
 
-            if socket.send(Message::Text(format!("Sent {index}"))).await.is_err() { 
+    tokio::spawn(async move {
+        loop { 
+            if socket.send().await.is_err() {
                 return
             }
-            index += 1;
 
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }

@@ -1,21 +1,20 @@
-mod server;
-use std::net::SocketAddr;
-use axum::{routing::get, Router};
+use sim::new_boundary;
 
-#[tokio::main]
-async fn main() {
-    let app = Router::new()
-        .route("/", get(root))
-        .route("/ws", get(server::ws_handler));
+mod sim;
+fn main() {
+    let b = new_boundary(500, 500);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3030));
+    let mut simulation = sim::setup(b, 100);
+    simulation.run()
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap();
-}
+    // let app = Router::new()
+    //     .route("/", get(root))
+    //     .route("/ws", get(server::ws_handler));
 
-async fn root() -> &'static str {
-    "Hello, World!"
+    // let addr = SocketAddr::from(([127, 0, 0, 1], 3030));
+
+    // axum::Server::bind(&addr)
+    //     .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+    //     .await
+    //     .unwrap();
 }
