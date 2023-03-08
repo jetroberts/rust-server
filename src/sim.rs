@@ -9,11 +9,11 @@ pub struct Sim {
     acceleration: Points,
 }
 pub struct Boundaries {
-    width: u32,
-    height: u32 
+    width: f32,
+    height: f32,  
 }
 
-pub fn new_boundary(height: u32, width: u32)-> Boundaries {
+pub fn new_boundary(height: f32, width: f32)-> Boundaries {
     Boundaries { width, height }
 }
 
@@ -34,6 +34,7 @@ impl Sim {
         let run_sim = true;
         while run_sim {
             for i in 0..self.distance.x.len() {
+                self.check_bounds(i);
                 self.increment_distance(i);
                 self.increment_velocity(i);
             }
@@ -49,5 +50,14 @@ impl Sim {
     fn increment_velocity(&mut self, i: usize) {
         self.velocity.x[i] += self.acceleration.x[i];
         self.velocity.y[i] += self.acceleration.y[i];
+    }
+
+    fn check_bounds(&mut self, i: usize) {
+        if self.distance.x[i] >= self.bounds.width && self.distance.x[i] <= 0.0 {
+            self.acceleration.x[i] = -self.acceleration.x[i]
+        }
+        if self.distance.y[i] >= self.bounds.height && self.distance.y[i] <= 0.0 {
+            self.acceleration.y[i] = -self.acceleration.y[i]
+        }
     }
 }

@@ -1,40 +1,95 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr};
+use axum::{extract::{ws::{WebSocket, WebSocketUpgrade, Message, self}}, response::{IntoResponse, Html}, Router, routing::get, http::Response};
+use tokio::sync::{mpsc::{self, Receiver}};
 
-use axum::{extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}}, TypedHeader, headers, response::IntoResponse};
-
-pub async fn ws_handler(
-    ws: WebSocketUpgrade,
-    user: Option<TypedHeader<headers::UserAgent>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-) -> impl IntoResponse {
-    let cur_user  = match user {
-        Some(user) => user.to_string(),
-        None => "unknown".to_string(),
-    };
-
-    println!("{cur_user} at {addr} connected");
-    ws.on_upgrade(move |socket| handle_socket(socket, addr)) 
+#[derive(Clone, Debug)]
+struct State {
+    x: Vec<f32>,
+    y: Vec<f32>
 }
 
-async fn handle_socket(mut socket: WebSocket, who: SocketAddr) {
-    if socket.send(Message::Ping(vec![2, 3, 4])).await.is_ok() {
-        println!("Sent initial ping {who}");
-    } else {
-        println!("Unable to ping client {who}");
-        return
+pub async fn run_server() {
+
+    let app = Router::new()
+        .route("/", get(root))
+        .route("/index.css", get(styling))
+        .route("/index.js", get(js))
+        .route("/api/ws", get(ws_handler));
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    axum::Server::bind(&addr).serve(app.into_make_service_with_connect_info::<SocketAddr>()).await.unwrap();
+}
+
+async fn root() -> impl IntoResponse {
+    let main = tokio::fs::read("src/index.html").await.unwrap();
+    Html(main)
+}
+
+async fn styling() -> impl IntoResponse {
+    let style = tokio::fs::read_to_string("src/index.css").await.unwrap();
+
+    let resp = Response::builder()
+        .header("content-type", "text/css;charset=utf-8")
+        .body(style);
+
+    match resp { 
+        Ok(style) => style,
+        Err(err) => {
+            println!("Got an error trying to get the style sheet {}", err);
+            Response::default()
+        },
     }
+}
 
-    // Need a sender and receiever,
-    // Sender needs to send the updated state
-    // reciever needs to take commands to adjust params
+async fn js() -> impl IntoResponse {
+    let js = tokio::fs::read_to_string("src/index.js").await.unwrap();
 
+    let resp = Response::builder()
+        .header("content-type", "application/javascript;charset=utf-8")
+        .body(js);
+
+    match resp { 
+        Ok(js) => js,
+        Err(err) => {
+            println!("Got an error trying to get the js file {}", err);
+            Response::default()
+        },
+    }
+}
+
+async fn ws_handler(
+    ws: WebSocketUpgrade
+) -> impl IntoResponse {
+    let (tx, rx) = mpsc::channel(1);
+    let mut s = State{x: vec![1.2], y: vec![12.2]};
     tokio::spawn(async move {
-        loop { 
-            if socket.send().await.is_err() {
+        loop {
+            if tx.send(s.clone()).await.is_err() {
+                println!("no receiver");
                 return
-            }
+            };
+            s.x[0] += 1.0;
 
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        };
+    });
+
+    ws.on_upgrade( move |socket| handle_socket(socket, rx))
+}
+
+async fn handle_socket(mut socket: WebSocket, mut rx: Receiver<State>) {
+    tokio::spawn(async move {
+        loop {
+            let msg = rx.recv().await;
+            match msg {
+                Some(m) => {
+                    if socket.send(Message::Text(format!("send {:?}", m.x))).await.is_err() {
+                        println!("connection closed");
+                        return
+                    };
+                },
+                None => return,
+            }
         }
     });
 }
